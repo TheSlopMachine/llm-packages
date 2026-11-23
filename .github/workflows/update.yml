@@ -38,12 +38,13 @@ jobs:
       publish: ${{ steps.publish.outputs.publish }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Test generator
         run: go test ./...
@@ -66,7 +67,7 @@ jobs:
 
       - name: Install Nix
         if: steps.changes.outputs.changed == 'true' || github.event_name != 'schedule'
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@v32
 
       - name: Build Nix packages
         if: steps.changes.outputs.changed == 'true' || github.event_name != 'schedule'
@@ -106,14 +107,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.metadata.outputs.commit }}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Install tools
         run: |
@@ -143,11 +145,15 @@ jobs:
           RSA_PRIVATE_KEY_FILE: ${{ runner.temp }}/rsa-private.pem
         run: scripts/build-linux-repositories.sh site
 
+      # Artifacts reject ":" in paths, so every site part travels as a tar.
+      - name: Pack
+        run: tar -C site -cf site-linux.tar .
+
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: site-linux
-          path: site
+          path: site-linux.tar
           if-no-files-found: error
 
   freebsd:
@@ -156,7 +162,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.metadata.outputs.commit }}
 
@@ -182,11 +188,14 @@ jobs:
           prepare: pkg -N || env ASSUME_ALWAYS_YES=yes pkg bootstrap
           run: sh scripts/build-freebsd-repositories.sh work/freebsd site/freebsd work/rsa-private.pem
 
+      - name: Pack
+        run: tar -C site -cf site-freebsd.tar .
+
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: site-freebsd
-          path: site
+          path: site-freebsd.tar
           if-no-files-found: error
 
   pages:
@@ -200,25 +209,30 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.metadata.outputs.commit }}
 
       - name: Download
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: site-*
           merge-multiple: true
-          path: site
+          path: parts
 
-      - name: Write state
-        run: cat releases/*.json | sha256sum | cut -d' ' -f1 >site/state
+      - name: Assemble
+        run: |
+          mkdir site
+          for part in parts/site-*.tar; do
+            tar -C site -xf "$part"
+          done
+          cat releases/*.json | sha256sum | cut -d' ' -f1 >site/state
 
       - name: Upload
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
