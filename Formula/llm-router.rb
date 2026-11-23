@@ -2,28 +2,28 @@
 class LlmRouter < Formula
   desc "Self-contained OpenAI-compatible LLM routing gateway"
   homepage "https://github.com/TheSlopMachine/llm-router"
-  version "0.12.1"
+  version "0.12.2"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.1/llm-router_darwin_arm64.zip"
-      sha256 "6b899176571055aef09d6edf4c5adf0ebab58a9adcc2a5491461991d0c3860e4"
+      url "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.2/llm-router_darwin_arm64.zip"
+      sha256 "abe985075a77ac5968ba1e4c6a4798ca6c307613ad78e77e074abcc8d010d80a"
     end
     on_intel do
-      url "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.1/llm-router_darwin_amd64.zip"
-      sha256 "68f4ff410ca0a8c53b04be0035605e966173cbad005ccf85626796d299a352a8"
+      url "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.2/llm-router_darwin_amd64.zip"
+      sha256 "cf904d3dca1775da1f686850625ebb537e30ebc6ed03d976a8e61b3035a996c7"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.1/llm-router_linux_arm64.zip"
-      sha256 "c9ee8d886b20aa77917532cde15f265291111a9d8b1cfb9d5fc5d66b0a593a90"
+      url "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.2/llm-router_linux_arm64.zip"
+      sha256 "d9a04fbb87ca4b197d8cfd3dfb82b99ff3e184bacaa3f9f4f0f0a452635f1061"
     end
     on_intel do
-      url "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.1/llm-router_linux_amd64.zip"
-      sha256 "72fefaf1b77748b8d821a26b870e8226c7fa6aa024cf2e4f54f40a3538e6fd76"
+      url "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.2/llm-router_linux_amd64.zip"
+      sha256 "d48aeca1a07f9301b8a9c71828cdfc95538a93b8ba9416daa31485435d69f616"
     end
   end
 
