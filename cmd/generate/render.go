@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"text/template"
@@ -26,7 +27,9 @@ type scoopManifest struct {
 	Homepage     string                       `json:"homepage"`
 	License      string                       `json:"license"`
 	Architecture map[string]scoopArchitecture `json:"architecture"`
+	ExtractTo    string                       `json:"extract_to"`
 	Bin          string                       `json:"bin"`
+	PostInstall  []string                     `json:"post_install"`
 }
 
 // renderScoop returns nil when the release has no Windows archive.
@@ -46,7 +49,15 @@ func renderScoop(release Release) ([]byte, error) {
 		Homepage:     release.Homepage,
 		License:      release.License,
 		Architecture: architectures,
-		Bin:          release.Binary + ".exe",
+		// Every package places a marker at ../share/<app>/package-manager from
+		// the binary: apps read it to refuse a self-update. The binary sits in
+		// bin\ so that the path matches the Unix layout.
+		ExtractTo: "bin",
+		Bin:       `bin\` + release.Binary + ".exe",
+		PostInstall: []string{
+			fmt.Sprintf(`New-Item -ItemType Directory -Force -Path "$dir\share\%s" | Out-Null`, release.Name),
+			fmt.Sprintf(`Set-Content -Path "$dir\share\%s\package-manager" -Value Scoop`, release.Name),
+		},
 	}
 	data, err := json.MarshalIndent(manifest, "", "    ")
 	if err != nil {
@@ -108,7 +119,18 @@ class {{.Class}} < Formula
 
   def install
     bin.install {{ruby .Binary}}
+    (share/{{ruby .Name}}).mkpath
+    (share/{{ruby (print .Name "/package-manager")}}).write "Homebrew\n"
   end
+{{- with .Service}}
+
+  service do
+    run [opt_bin/{{ruby $.Binary}}{{range .Arguments}}, {{ruby .}}{{end}}]
+    keep_alive crashed: true
+    log_path var/{{ruby (print "log/" $.Name ".log")}}
+    error_log_path var/{{ruby (print "log/" $.Name ".log")}}
+  end
+{{- end}}
 
   test do
     assert_predicate bin/{{ruby .Binary}}, :executable?

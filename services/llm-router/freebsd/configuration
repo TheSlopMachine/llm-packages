@@ -1,0 +1,5 @@
+# Package configuration. The service and `sudo llm-router` read this file.
+CACHE_PATH=/var/cache/llm-router/llm-router.cache.sqlite3
+CREDENTIALS_KEY_FILE=/usr/local/etc/llm-router/credentials.key
+DB_PATH=/var/db/llm-router/llm-router.sqlite3
+EVENTS_PATH=/var/db/llm-router/llm-router.events.sqlite3

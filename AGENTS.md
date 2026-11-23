@@ -8,16 +8,18 @@ Rules for AI agents in `llm-packages/`.
 |---|---|---|
 | `apps.json` | human | Apps to publish |
 | `cmd/generate` | human | Resolves releases and renders metadata |
+| `cmd/generate/templates/` | human | systemd, OpenRC and FreeBSD rc.d files and package scripts |
 | `releases/` | generated | One release record per app. Every manager reads it or is rendered from it |
 | `bucket/` | generated | Scoop manifests |
 | `Formula/` | generated | Homebrew formulas |
-| `flake.nix` | human | Nix packages read from `releases/` |
+| `services/` | generated | Service files and package scripts of server apps |
+| `flake.nix` | human | Nix packages and NixOS modules read from `releases/` and `services/` |
 | `flake.lock` | CI | Created by the `update` workflow |
 | `scripts/` | human | APT, RPM, APK and FreeBSD repository builds for GitHub Pages |
 
 Never edit generated files by hand. Run `go run ./cmd/generate`.
 
-Platform tables live where each format needs them: `render.go` (Scoop, Homebrew), `flake.nix` (Nix), `linux_targets` and `freebsd_targets` in `scripts/`.
+Platform tables live where each format needs them: `render.go` (Scoop, Homebrew), `flake.nix` (Nix), `linux_targets` and `freebsd_targets` in `scripts/`. Service directories per platform live in `service.go`.
 
 ## Rules
 
@@ -31,3 +33,4 @@ Platform tables live where each format needs them: `render.go` (Scoop, Homebrew)
 - `go vet ./...`, `go test ./...`, `gofmt -l .`
 - `bash -n` on every changed script.
 - Repository builds run only in CI. Read the `update` workflow logs.
+- The `nixos` job boots NixOS with every service module. It runs on pushes and manual starts.

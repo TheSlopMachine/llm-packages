@@ -67,6 +67,46 @@ fetch https://theslopmachine.github.io/llm-packages/freebsd/theslopmachine.conf 
 pkg update && pkg install llm-router
 ```
 
+## Run llm-router as a service
+
+APT, DNF, Zypper, APK and pkg packages install a service. It does not start on its own. Set the dashboard password, then start the service and enable it at boot:
+
+```sh
+sudo llm-router set-dashboard-password
+sudo llm-router daemon enable --now
+```
+
+`sudo llm-router daemon start|stop|restart|status` controls the service through systemd, OpenRC or FreeBSD rc.d.
+
+The service reads `/etc/llm-router/.env` (`/usr/local/etc/llm-router/.env` on FreeBSD). Change settings with `sudo llm-router config`, then run `sudo llm-router daemon restart`. Back up the configuration directory with the data: provider keys cannot be decrypted without `credentials.key`.
+
+Upgrades restart a running service.
+
+With Homebrew, run `llm-router set-dashboard-password` and `brew services start llm-router`.
+
+### NixOS
+
+```nix
+{
+  inputs.llm-packages.url = "github:TheSlopMachine/llm-packages";
+
+  outputs = { nixpkgs, llm-packages, ... }: {
+    nixosConfigurations.host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        llm-packages.nixosModules.llm-router
+        {
+          services.llm-router.enable = true;
+          services.llm-router.settings.HOST = "0.0.0.0";
+        }
+      ];
+    };
+  };
+}
+```
+
+Set the password with `sudo llm-router set-dashboard-password`. Settings go into `services.llm-router.settings`: NixOS rewrites `/etc/llm-router/.env` on every switch.
+
 ## Publish an app
 
 The `update` workflow publishes every app in `apps.json`. It runs on a `release` dispatch, every 15 minutes, and on a manual start.
@@ -76,6 +116,20 @@ An app qualifies when its latest GitHub release has:
 - a tag `vX.Y` or `vX.Y.Z`;
 - one archive per platform named `<binary>_<goos>_<goarch>.zip` with the binary at the archive root;
 - `checksums.txt` with `<sha256>  <path>/<archive>` lines.
+
+Every package places `../share/<app>/package-manager` next to the binary. It holds the package manager name. An app with a self-update reads it and refuses to update itself.
+
+A server app adds `service` to its `apps.json` entry:
+
+```json
+"service": {
+    "arguments": ["serve"],
+    "configuration_file": ".env",
+    "configuration": {"DB_PATH": "{state}/app.sqlite3"}
+}
+```
+
+Packages run `<binary> <arguments>` as the user `<app>` and install `configuration` as `<configuration directory>/<configuration_file>`, owned by that user. `{configuration}`, `{state}` and `{cache}` expand to `/etc/<app>`, `/var/lib/<app>` and `/var/cache/<app>` on Linux, and to `/usr/local/etc/<app>`, `/var/db/<app>` and `/var/cache/<app>` on FreeBSD.
 
 Add the app to `apps.json`. Then add this step after the release step of the app's workflow:
 

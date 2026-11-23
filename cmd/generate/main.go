@@ -1,8 +1,9 @@
 // Command generate resolves the latest release of every app in apps.json and
-// rewrites the generated directories: releases/, bucket/ and Formula/.
+// rewrites the generated directories: releases/, bucket/, Formula/ and services/.
 //
 // releases/<app>.json is the release record. The Nix flake and the repository
-// scripts read it. bucket/ and Formula/ are rendered from the same record.
+// scripts read it. bucket/, Formula/ and services/ are rendered from the same
+// record. services/<app>/ holds the service files of server apps.
 package main
 
 import (
@@ -24,6 +25,8 @@ type App struct {
 	Description string `json:"description"`
 	Homepage    string `json:"homepage"`
 	License     string `json:"license"`
+	// Service is set for server apps. Packages install it as a system service.
+	Service *Service `json:"service,omitempty"`
 }
 
 // Asset is one release archive. The key in Release.Assets is "<goos>_<goarch>".
@@ -41,7 +44,7 @@ type Release struct {
 }
 
 // generatedDirectories are owned by this command. Files not produced by a run are deleted.
-var generatedDirectories = []string{"releases", "bucket", "Formula"}
+var generatedDirectories = []string{"releases", "bucket", "Formula", "services"}
 
 var (
 	namePattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
@@ -102,6 +105,11 @@ func loadApps(path string) ([]App, error) {
 		if app.Repository == "" || app.Binary == "" || app.Description == "" || app.Homepage == "" || app.License == "" {
 			return nil, fmt.Errorf("%s: app %q misses a required field", path, app.Name)
 		}
+		if app.Service != nil {
+			if err := app.Service.validate(); err != nil {
+				return nil, fmt.Errorf("%s: app %q: %w", path, app.Name, err)
+			}
+		}
 	}
 	return document.Apps, nil
 }
@@ -129,25 +137,48 @@ func renderRelease(release Release, files map[string][]byte) error {
 	if formula != nil {
 		files[filepath.Join("Formula", release.Name+".rb")] = formula
 	}
+
+	if err := renderService(release, files); err != nil {
+		return fmt.Errorf("service: %w", err)
+	}
 	return nil
 }
 
-// writeGenerated writes files and deletes stale files in the generated directories.
+// writeGenerated writes files and deletes stale files and empty directories in the generated directories.
 func writeGenerated(files map[string][]byte) error {
 	for _, directory := range generatedDirectories {
-		entries, err := os.ReadDir(directory)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		for _, entry := range entries {
-			path := filepath.Join(directory, entry.Name())
-			if _, keep := files[path]; keep {
-				continue
+		var directories []string
+		err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
-			if err := os.RemoveAll(path); err != nil {
+			if entry.IsDir() {
+				directories = append(directories, path)
+				return nil
+			}
+			if _, keep := files[path]; keep {
+				return nil
+			}
+			if err := os.Remove(path); err != nil {
 				return err
 			}
 			fmt.Printf("removed %s\n", filepath.ToSlash(path))
+			return nil
+		})
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		// Walk order puts parents first, so the reverse order empties children first.
+		for index := len(directories) - 1; index >= 0; index-- {
+			entries, err := os.ReadDir(directories[index])
+			if err != nil {
+				return err
+			}
+			if len(entries) == 0 {
+				if err := os.Remove(directories[index]); err != nil {
+					return err
+				}
+			}
 		}
 	}
 

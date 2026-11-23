@@ -6,7 +6,17 @@
             "binary": "llm-router",
             "description": "Self-contained OpenAI-compatible LLM routing gateway",
             "homepage": "https://github.com/TheSlopMachine/llm-router",
-            "license": "MIT"
+            "license": "MIT",
+            "service": {
+                "arguments": ["serve"],
+                "configuration_file": ".env",
+                "configuration": {
+                    "DB_PATH": "{state}/llm-router.sqlite3",
+                    "EVENTS_PATH": "{state}/llm-router.events.sqlite3",
+                    "CACHE_PATH": "{cache}/llm-router.cache.sqlite3",
+                    "CREDENTIALS_KEY_FILE": "{configuration}/credentials.key"
+                }
+            }
         }
     ]
 }

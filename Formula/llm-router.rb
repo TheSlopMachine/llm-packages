@@ -29,6 +29,15 @@ class LlmRouter < Formula
 
   def install
     bin.install "llm-router"
+    (share/"llm-router").mkpath
+    (share/"llm-router/package-manager").write "Homebrew\n"
+  end
+
+  service do
+    run [opt_bin/"llm-router", "serve"]
+    keep_alive crashed: true
+    log_path var/"log/llm-router.log"
+    error_log_path var/"log/llm-router.log"
   end
 
   test do

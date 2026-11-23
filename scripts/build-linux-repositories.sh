@@ -47,6 +47,12 @@ mkdir -p "$site/keys" "$site/apt/pool/main" "$site/rpm" "$site/apk"
 gpg --batch --armor --export "$fingerprint" >"$site/keys/$key_name.asc"
 openssl rsa -in "$RSA_PRIVATE_KEY_FILE" -pubout -out "$site/keys/$key_name.rsa.pub"
 
+# Each format names its package manager in /usr/share/<app>/package-manager. Apps read it to refuse a self-update.
+mkdir -p "$work/markers"
+printf 'APT\n' >"$work/markers/deb"
+printf 'DNF or Zypper\n' >"$work/markers/rpm"
+printf 'APK\n' >"$work/markers/apk"
+
 # abuild-sign names the signature after the key file, so the key needs this exact name.
 mkdir -p "$work/apk-keys"
 install -m 600 "$RSA_PRIVATE_KEY_FILE" "$work/apk-keys/$key_name.rsa"
@@ -88,18 +94,38 @@ for record in "${records[@]}"; do
 			apk_dependency=gcompat
 		fi
 
+		# Modes are decimal: 493 is 0755, 488 is 0750, 420 is 0644, 416 is 0640.
 		jq -n \
 			--slurpfile release "$record" \
 			--arg architecture "$nfpm_architecture" \
 			--arg maintainer "$maintainer" \
 			--arg source "$binary_path" \
+			--arg markers "$work/markers" \
+			--arg services "$PWD/services/$name" \
 			--arg gpg_key "$GPG_PRIVATE_KEY_FILE" \
 			--arg rsa_key "$RSA_PRIVATE_KEY_FILE" \
 			--arg key_name "$key_name" \
 			--arg apk_dependency "$apk_dependency" \
 			--arg package_release "$package_release" \
-			'$release[0] as $release | {
-				name: $release.name,
+			'$release[0] as $release
+			| ($release.name) as $name
+			| ([{src: $source, dst: ("/usr/bin/" + $release.binary), file_info: {mode: 493}}]
+			+ [("deb", "rpm", "apk") | {src: ($markers + "/" + .), dst: ("/usr/share/" + $name + "/package-manager"), packager: ., file_info: {mode: 420}}]
+			+ (if $release.service == null then [] else [
+				{src: ($services + "/linux/" + $name + ".service"), dst: ("/usr/lib/systemd/system/" + $name + ".service"), packager: "deb", file_info: {mode: 420}},
+				{src: ($services + "/linux/" + $name + ".service"), dst: ("/usr/lib/systemd/system/" + $name + ".service"), packager: "rpm", file_info: {mode: 420}},
+				{src: ($services + "/alpine/" + $name + ".initd"), dst: ("/etc/init.d/" + $name), packager: "apk", file_info: {mode: 493}},
+				# apk resets package directories after the scripts run, so the package itself gives this one to the service user.
+				{dst: ("/etc/" + $name), type: "dir", packager: "apk", file_info: {mode: 488, owner: $name, group: $name}},
+				{src: ($services + "/linux/configuration"), dst: ("/etc/" + $name + "/" + $release.service.configuration_file), type: "config|noreplace", file_info: {mode: 416}}
+			] end)) as $contents
+			| {
+				postinstall: ($services + "/linux/postinstall.sh"),
+				preremove: ($services + "/linux/preremove.sh"),
+				postremove: ($services + "/linux/postremove.sh")
+			} as $systemd_scripts
+			| {
+				name: $name,
 				arch: $architecture,
 				platform: "linux",
 				version: $release.version,
@@ -109,10 +135,21 @@ for record in "${records[@]}"; do
 				description: $release.description,
 				homepage: $release.homepage,
 				license: $release.license,
-				contents: [{src: $source, dst: ("/usr/bin/" + $release.binary), file_info: {mode: 493}}],
+				contents: $contents,
 				rpm: {signature: {key_file: $gpg_key}},
-				apk: {signature: {key_file: $rsa_key, key_name: $key_name}}
-			} + (if $apk_dependency == "" then {} else {overrides: {apk: {depends: [$apk_dependency]}}} end)' \
+				apk: ({signature: {key_file: $rsa_key, key_name: $key_name}}
+					+ (if $release.service == null then {} else {scripts: {postupgrade: ($services + "/alpine/postupgrade.sh")}} end)),
+				overrides: {
+					deb: (if $release.service == null then {} else {scripts: $systemd_scripts} end),
+					rpm: (if $release.service == null then {} else {scripts: $systemd_scripts} end),
+					apk: ((if $apk_dependency == "" then {} else {depends: [$apk_dependency]} end)
+						+ (if $release.service == null then {} else {scripts: {
+							preinstall: ($services + "/alpine/preinstall.sh"),
+							postinstall: ($services + "/alpine/postinstall.sh"),
+							preremove: ($services + "/alpine/preremove.sh")
+						}} end))
+				}
+			}' \
 			>"$directory/nfpm.yaml"
 
 		mkdir -p "$site/apt/pool/main/$name" "$site/apk/$apk_architecture"

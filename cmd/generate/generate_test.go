@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -101,7 +102,7 @@ func TestRenderScoop(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(manifest)
-	for _, want := range []string{`"64bit"`, `"arm64"`, `"bin": "llm-tool.exe"`} {
+	for _, want := range []string{`"64bit"`, `"arm64"`, `"extract_to": "bin"`, `"bin": "bin\\llm-tool.exe"`, `$dir\\share\\llm-tool\\package-manager`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("manifest misses %s:\n%s", want, text)
 		}
@@ -114,4 +115,112 @@ func TestRenderScoop(t *testing.T) {
 	if err != nil || none != nil {
 		t.Errorf("Linux-only release: manifest = %q, err = %v; want nil", none, err)
 	}
+}
+
+func testService() *Service {
+	return &Service{
+		Arguments:         []string{"serve"},
+		ConfigurationFile: ".env",
+		Configuration: map[string]string{
+			"DB_PATH":  "{state}/tool.sqlite3",
+			"KEY_FILE": "{configuration}/key",
+		},
+	}
+}
+
+func TestRenderFormulaService(t *testing.T) {
+	release := testRelease("linux_amd64")
+	release.Service = testService()
+	formula, err := renderFormula(release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(formula)
+	for _, want := range []string{
+		`(share/"llm-tool/package-manager").write "Homebrew\n"`,
+		`run [opt_bin/"llm-tool", "serve"]`,
+		`log_path var/"log/llm-tool.log"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("formula misses %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestRenderService(t *testing.T) {
+	release := testRelease("linux_amd64")
+	release.Description = "Tool 100%"
+	release.Service = testService()
+	files := map[string][]byte{}
+	if err := renderService(release, files); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"linux/configuration":     {"DB_PATH=/var/lib/llm-tool/tool.sqlite3\nKEY_FILE=/etc/llm-tool/key\n"},
+		"freebsd/configuration":   {"DB_PATH=/var/db/llm-tool/tool.sqlite3\nKEY_FILE=/usr/local/etc/llm-tool/key\n"},
+		"linux/llm-tool.service":  {"Description=Tool 100%%\n", "ExecStart=/usr/bin/llm-tool serve\n", "User=llm-tool\n"},
+		"linux/postinstall.sh":    {"useradd --system --gid llm-tool --home-dir /var/lib/llm-tool", "chown llm-tool:llm-tool /etc/llm-tool /var/lib/llm-tool /var/cache/llm-tool /etc/llm-tool/.env\n", "systemctl try-restart llm-tool.service"},
+		"linux/preremove.sh":      {"systemctl disable --now llm-tool.service"},
+		"linux/postremove.sh":     {"systemctl daemon-reload"},
+		"alpine/llm-tool.initd":   {"command=/usr/bin/llm-tool\n", "command_args='serve'\n", "export HOME=/var/lib/llm-tool\n"},
+		"alpine/preinstall.sh":    {"adduser -S -D -H -h /var/lib/llm-tool"},
+		"alpine/postinstall.sh":   {"chown llm-tool:llm-tool /var/lib/llm-tool /var/cache/llm-tool /etc/llm-tool/.env\n"},
+		"alpine/postupgrade.sh":   {"rc-service --ifstarted llm-tool restart"},
+		"alpine/preremove.sh":     {"rc-service --ifstarted llm-tool stop"},
+		"freebsd/llm_tool":        {"name=llm_tool\n", `llm_tool_env="HOME=/var/db/llm-tool"`, "-T llm-tool /usr/local/bin/llm-tool serve\""},
+		"freebsd/post-install.sh": {"pw useradd llm-tool -g llm-tool -d /var/db/llm-tool", "service llm_tool onerestart"},
+	}
+	if len(files) != len(want) {
+		t.Errorf("rendered %d files, want %d: %v", len(files), len(want), keys(files))
+	}
+	for file, fragments := range want {
+		content, ok := files[filepath.Join("services", "llm-tool", filepath.FromSlash(file))]
+		if !ok {
+			t.Errorf("missing %s", file)
+			continue
+		}
+		for _, fragment := range fragments {
+			if !strings.Contains(string(content), fragment) {
+				t.Errorf("%s misses %q:\n%s", file, fragment, content)
+			}
+		}
+	}
+	if content := string(files[filepath.Join("services", "llm-tool", "alpine", "postinstall.sh")]); strings.Contains(content, "rc-service") {
+		t.Errorf("postinstall restarts the service:\n%s", content)
+	}
+
+	none := map[string][]byte{}
+	if err := renderService(testRelease("linux_amd64"), none); err != nil || len(none) != 0 {
+		t.Errorf("release without service: files = %v, err = %v; want none", keys(none), err)
+	}
+}
+
+func TestServiceValidateRejects(t *testing.T) {
+	cases := map[string]func(*Service){
+		"no arguments":        func(service *Service) { service.Arguments = nil },
+		"argument with space": func(service *Service) { service.Arguments = []string{"serve now"} },
+		"file path":           func(service *Service) { service.ConfigurationFile = "../.env" },
+		"dots only":           func(service *Service) { service.ConfigurationFile = ".." },
+		"lowercase key":       func(service *Service) { service.Configuration["db"] = "x" },
+		"unknown placeholder": func(service *Service) { service.Configuration["LOG"] = "{logs}/x" },
+		"quote":               func(service *Service) { service.Configuration["NAME"] = `a"b` },
+	}
+	for name, change := range cases {
+		service := testService()
+		change(service)
+		if err := service.validate(); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+	if err := testService().validate(); err != nil {
+		t.Errorf("valid service: %v", err)
+	}
+}
+
+func keys(files map[string][]byte) []string {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, filepath.ToSlash(name))
+	}
+	return names
 }

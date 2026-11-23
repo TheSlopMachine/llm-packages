@@ -51,14 +51,35 @@ for record in "${records[@]}"; do
 		fi
 
 		directory="$work/$abi/$name"
-		mkdir -p "$directory/stage/usr/local/bin"
-		unzip -q -o "$archive" "$binary" -d "$directory/stage/usr/local/bin"
-		chmod 755 "$directory/stage/usr/local/bin/$binary"
-		printf '@owner root\n@group wheel\n@mode 0755\nbin/%s\n' "$binary" >"$directory/plist"
+		stage="$directory/stage/usr/local"
+		mkdir -p "$stage/bin" "$stage/share/$name"
+		unzip -q -o "$archive" "$binary" -d "$stage/bin"
+		chmod 755 "$stage/bin/$binary"
+		# Apps read the marker to refuse a self-update.
+		printf 'pkg\n' >"$stage/share/$name/package-manager"
+		{
+			printf '@owner root\n@group wheel\n@mode 0755\nbin/%s\n' "$binary"
+			printf '@mode 0644\nshare/%s/package-manager\n' "$name"
+		} >"$directory/plist"
+
+		services="services/$name/freebsd"
+		post_install=""
+		if [[ $(jq '.service != null' "$record") == true ]]; then
+			rc_name=${name//-/_}
+			configuration_file=$(jq -r .service.configuration_file "$record")
+			mkdir -p "$stage/etc/rc.d" "$stage/etc/$name"
+			install -m 755 "$services/$rc_name" "$stage/etc/rc.d/$rc_name"
+			install -m 640 "$services/configuration" "$stage/etc/$name/$configuration_file"
+			# @config keeps local edits of the configuration across upgrades.
+			printf '@mode 0755\netc/rc.d/%s\n@mode 0640\n@config etc/%s/%s\n' "$rc_name" "$name" "$configuration_file" >>"$directory/plist"
+			post_install="$services/post-install.sh"
+		fi
+
 		jq -n \
 			--slurpfile release "$record" \
 			--arg abi "$abi" \
 			--arg maintainer "$maintainer" \
+			--rawfile post_install "${post_install:-/dev/null}" \
 			'$release[0] as $release | {
 				name: $release.name,
 				origin: ("theslopmachine/" + $release.name),
@@ -72,7 +93,7 @@ for record in "${records[@]}"; do
 				licenselogic: "single",
 				licenses: [$release.license],
 				categories: ["sysutils"]
-			}' >"$directory/+MANIFEST"
+			} + (if $post_install == "" then {} else {scripts: {"post-install": $post_install}} end)' >"$directory/+MANIFEST"
 	done
 done
 rm -rf "$work/archives"

@@ -198,6 +198,31 @@ jobs:
           path: site-freebsd.tar
           if-no-files-found: error
 
+  # Boots NixOS with every service module. It checks code changes and does not hold up a release.
+  nixos:
+    needs: metadata
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v32
+        with:
+          extra_nix_config: system-features = nixos-test benchmark big-parallel kvm
+
+      - name: Check flake
+        run: nix flake check --print-build-logs
+
   pages:
     needs: [metadata, linux, freebsd]
     runs-on: ubuntu-latest

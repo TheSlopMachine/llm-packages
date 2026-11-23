@@ -17,5 +17,10 @@
             "hash": "e5e24beee639101670488021802e45b29f1bdacc126236af88d6fb6b19775e1e"
         }
     },
-    "bin": "llm-router.exe"
+    "extract_to": "bin",
+    "bin": "bin\\llm-router.exe",
+    "post_install": [
+        "New-Item -ItemType Directory -Force -Path \"$dir\\share\\llm-router\" | Out-Null",
+        "Set-Content -Path \"$dir\\share\\llm-router\\package-manager\" -Value Scoop"
+    ]
 }
