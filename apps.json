@@ -1,0 +1,12 @@
+{
+    "apps": [
+        {
+            "name": "llm-router",
+            "repository": "TheSlopMachine/llm-router",
+            "binary": "llm-router",
+            "description": "Self-contained OpenAI-compatible LLM routing gateway",
+            "homepage": "https://github.com/TheSlopMachine/llm-router",
+            "license": "MIT"
+        }
+    ]
+}

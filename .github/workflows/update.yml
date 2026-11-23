@@ -1,0 +1,224 @@
+name: update
+
+on:
+  # An app's release workflow sends this event right after it publishes.
+  repository_dispatch:
+    types: [release]
+  # Fallback for a missed dispatch. It also republishes the site when it is behind.
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - apps.json
+      - go.mod
+      - cmd/**
+      - scripts/**
+      - flake.nix
+      - .github/workflows/update.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+env:
+  SITE_URL: https://theslopmachine.github.io/llm-packages
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.commit.outputs.commit }}
+      publish: ${{ steps.publish.outputs.publish }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test generator
+        run: go test ./...
+
+      - name: Generate metadata
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go run ./cmd/generate
+
+      - name: Detect changes
+        id: changes
+        run: |
+          # Flakes see only files in the git index.
+          git add --all
+          if git diff --cached --quiet && [[ -f flake.lock ]]; then
+            echo "changed=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Nix
+        if: steps.changes.outputs.changed == 'true' || github.event_name != 'schedule'
+        uses: cachix/install-nix-action@v31
+
+      - name: Build Nix packages
+        if: steps.changes.outputs.changed == 'true' || github.event_name != 'schedule'
+        run: |
+          nix flake lock
+          git add flake.lock
+          mapfile -t packages < <(nix eval --json .#packages.x86_64-linux --apply builtins.attrNames | jq -r '.[]')
+          nix build --no-link "${packages[@]/#/.#}"
+
+      - name: Commit
+        id: commit
+        run: |
+          if ! git diff --cached --quiet; then
+            apps=$(git diff --cached --name-only -- releases | xargs -r -n1 basename | sed 's/\.json$//' | paste -sd, -)
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore: update ${apps:-metadata}"
+            git push
+          fi
+          echo "commit=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+
+      - name: Decide on publishing
+        id: publish
+        run: |
+          state=$(cat releases/*.json | sha256sum | cut -d' ' -f1)
+          published=$(curl -fsS "$SITE_URL/state" || echo none)
+          if [[ $GITHUB_EVENT_NAME == schedule && $state == "$published" ]]; then
+            echo "publish=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "Site state: $published. Release state: $state."
+            echo "publish=true" >>"$GITHUB_OUTPUT"
+          fi
+
+  linux:
+    needs: metadata
+    if: needs.metadata.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install tools
+        run: |
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.49.0
+          sudo apt-get update
+          sudo apt-get install -y apt-utils createrepo-c
+
+      - name: Write signing keys
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          RSA_PRIVATE_KEY: ${{ secrets.RSA_PRIVATE_KEY }}
+        run: |
+          for secret in GPG_PRIVATE_KEY RSA_PRIVATE_KEY; do
+            if [[ -z ${!secret} ]]; then
+              echo "::error::Secret $secret is not set. Run scripts/create-signing-keys.sh."
+              exit 1
+            fi
+          done
+          install -m 600 /dev/null "$RUNNER_TEMP/gpg-private.asc"
+          install -m 600 /dev/null "$RUNNER_TEMP/rsa-private.pem"
+          printf '%s\n' "$GPG_PRIVATE_KEY" >"$RUNNER_TEMP/gpg-private.asc"
+          printf '%s\n' "$RSA_PRIVATE_KEY" >"$RUNNER_TEMP/rsa-private.pem"
+
+      - name: Build repositories
+        env:
+          GPG_PRIVATE_KEY_FILE: ${{ runner.temp }}/gpg-private.asc
+          RSA_PRIVATE_KEY_FILE: ${{ runner.temp }}/rsa-private.pem
+        run: scripts/build-linux-repositories.sh site
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-linux
+          path: site
+          if-no-files-found: error
+
+  freebsd:
+    needs: metadata
+    if: needs.metadata.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+
+      - name: Stage packages
+        run: scripts/stage-freebsd-packages.sh work/freebsd site/freebsd
+
+      - name: Write signing key
+        env:
+          RSA_PRIVATE_KEY: ${{ secrets.RSA_PRIVATE_KEY }}
+        run: |
+          if [[ -z $RSA_PRIVATE_KEY ]]; then
+            echo "::error::Secret RSA_PRIVATE_KEY is not set. Run scripts/create-signing-keys.sh."
+            exit 1
+          fi
+          install -m 600 /dev/null work/rsa-private.pem
+          printf '%s\n' "$RSA_PRIVATE_KEY" >work/rsa-private.pem
+
+      - name: Build repositories
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: '14.3'
+          usesh: true
+          prepare: pkg -N || env ASSUME_ALWAYS_YES=yes pkg bootstrap
+          run: sh scripts/build-freebsd-repositories.sh work/freebsd site/freebsd work/rsa-private.pem
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-freebsd
+          path: site
+          if-no-files-found: error
+
+  pages:
+    needs: [metadata, linux, freebsd]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+
+      - name: Download
+        uses: actions/download-artifact@v4
+        with:
+          pattern: site-*
+          merge-multiple: true
+          path: site
+
+      - name: Write state
+        run: cat releases/*.json | sha256sum | cut -d' ' -f1 >site/state
+
+      - name: Upload
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
