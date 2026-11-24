@@ -96,6 +96,9 @@
             };
             users.groups.${name} = { };
             environment.systemPackages = [ cfg.package ];
+            # NixOS does not link arbitrary /share entries into the system profile by default.
+            # Expose this app's package-manager marker at the path used by the binary.
+            environment.pathsToLink = [ "/share/${name}" ];
             # The same file as in the Linux packages. The owner lets `sudo ${name}` act as the service user.
             environment.etc."${name}/${service.configuration_file}" = {
               text = builtins.readFile (./services + "/${name}/linux/configuration")
