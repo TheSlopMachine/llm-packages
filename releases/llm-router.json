@@ -17,52 +17,56 @@
             "EVENTS_PATH": "{state}/llm-router.events.sqlite3"
         }
     },
-    "version": "0.12.3",
-    "tag": "v0.12.3",
+    "version": "0.12.4",
+    "tag": "v0.12.4",
     "assets": {
         "darwin_amd64": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_darwin_amd64.zip",
-            "sha256": "f177ccc07e76928e1e05240c81ee0627933ddb6ba6a116f9428a057d224c4fa9"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_darwin_amd64.zip",
+            "sha256": "3e3680067fe84f85d0c9d306b6e534610cc44920e1afcced9893baf4abae34a7"
         },
         "darwin_arm64": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_darwin_arm64.zip",
-            "sha256": "071d30ed74ac169de55efcc82e27ae70bbd060706f6f1df1d18246611ee9dc3e"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_darwin_arm64.zip",
+            "sha256": "12fa0e15094ee3dc37bfc1b75344521073fbf712a1721022572bbda8e3dbd4ca"
         },
         "freebsd_386": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_freebsd_386.zip",
-            "sha256": "1a69eb8bbc1184e78d1ac2728f8f44660d8ef333a72b13517e5a1447bdd036a6"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_freebsd_386.zip",
+            "sha256": "daca1bf9953ff9148a36017fe697f3b5b67426dcd90376f283d9d8d65c41e1e9"
         },
         "freebsd_amd64": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_freebsd_amd64.zip",
-            "sha256": "a348e4e6652c6fa00c6bcb35caca7f268a0c083f55362f2ad812e55fd3cad946"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_freebsd_amd64.zip",
+            "sha256": "19102c2688fb978b39a87142d7a8b6321688c87118711fe0f55f69c69f24b140"
         },
         "freebsd_arm64": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_freebsd_arm64.zip",
-            "sha256": "538b25101f9bf99990df32a3a6508d1dcf5c8d76192f7d33c841cbde47549cb8"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_freebsd_arm64.zip",
+            "sha256": "8e0681fc1c1457b130823a160ccd4758f73ccd8c8e86d61eb26c8c890c1952ce"
         },
         "linux_386": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_linux_386.zip",
-            "sha256": "d47c534451de2aa67c613b1eb19d2252785a095ebd144343c41cb25482827196"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_linux_386.zip",
+            "sha256": "3c0fc749e694ab841ee5c569c93aa8f70f2a768f44323a8d6a9f0abf57abf939"
         },
         "linux_amd64": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_linux_amd64.zip",
-            "sha256": "83a76511ceae4ef15c0513f5458b3fac6b286bf616b472f9c3413c91b60c14e0"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_linux_amd64.zip",
+            "sha256": "1f7f8e63c6d8903f99e0d786291bb4d0b794caa71976f536c14e0345d84021e7"
         },
         "linux_arm": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_linux_arm.zip",
-            "sha256": "6931970398ce46eb1cee7630f9ea78d77aecc566bccb463bebe7ad3f2462e67b"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_linux_arm.zip",
+            "sha256": "fc5da3044ebf44fcd7948929bb9f69e7b5fbbc1010b4471951359fc2102eb0d7"
         },
         "linux_arm64": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_linux_arm64.zip",
-            "sha256": "7632a3dd3b7bc821eab74476bb6c23e325b28050e731bdae349b88853c03ab96"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_linux_arm64.zip",
+            "sha256": "cd175ffb54b2bd582fd5ae9054adefdf4ebcb47bf3b3afb54dc653adb9f05c78"
         },
         "windows_386": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_windows_386.zip",
-            "sha256": "fcb68e2fd2adae207dfc1e661ad9310edb2c68d9aeab46cd6fc244d1deb18139"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_windows_386.zip",
+            "sha256": "404aab17401387bbd75cf47bad40a2f8edf639c69d001a63db645b8ed8370eb0"
         },
         "windows_amd64": {
-            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.3/llm-router_windows_amd64.zip",
-            "sha256": "ab1fc338e45f44e4f5d2193545a2fa6b960de1872ccb8c4afdb0da5352096189"
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_windows_amd64.zip",
+            "sha256": "04907c3b46f376cedd7c760933ce76523a1f847913169b78e1a0599ab42843c8"
+        },
+        "windows_arm64": {
+            "url": "https://github.com/TheSlopMachine/llm-router/releases/download/v0.12.4/llm-router_windows_arm64.zip",
+            "sha256": "0e032319238695cb6038ada541cb4d86567fbdd1f70d6ea6c0fd5593b4bb3dd5"
         }
     }
 }
