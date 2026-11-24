@@ -226,12 +226,6 @@ jobs:
   pages:
     needs: [metadata, linux, freebsd]
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -248,16 +242,36 @@ jobs:
       - name: Assemble
         run: |
           mkdir site
-          for part in parts/site-*.tar; do
+          shopt -s nullglob
+          parts=(parts/site-*.tar)
+          if (( ${#parts[@]} == 0 )); then
+            echo "::error::No site archives were downloaded."
+            exit 1
+          fi
+          for part in "${parts[@]}"; do
             tar -C site -xf "$part"
           done
           cat releases/*.json | sha256sum | cut -d' ' -f1 >site/state
+          touch site/.nojekyll
 
-      - name: Upload
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: site
+      # Gitea Actions cannot use actions/deploy-pages: that action talks to
+      # GitHub's Pages deployment API. Publish the assembled site to the
+      # GitHub repository's gh-pages branch instead.
+      - name: Publish to GitHub Pages
+        env:
+          GH_PAGES_TOKEN: ${{ secrets.GH_PAGES_TOKEN }}
+        run: |
+          if [[ -z "$GH_PAGES_TOKEN" ]]; then
+            echo "::error::Secret GH_PAGES_TOKEN is not set. It needs Contents: read and write on TheSlopMachine/llm-packages."
+            exit 1
+          fi
 
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v5
+          git -C site init --initial-branch=gh-pages
+          git -C site config user.name "github-actions[bot]"
+          git -C site config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C site add --all
+          git -C site commit -m "Publish package repositories"
+
+          auth=$(printf 'x-access-token:%s' "$GH_PAGES_TOKEN" | base64 -w0)
+          git -C site -c "http.extraheader=AUTHORIZATION: basic $auth" \
+            push --force https://github.com/TheSlopMachine/llm-packages.git HEAD:gh-pages
